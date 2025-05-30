@@ -3,8 +3,17 @@ import { createOpenAI } from "@ai-sdk/openai";
 import { z } from 'zod';
 import { getInput } from '@actions/core';
 
+const EDA_RULES = `
+- All schema changes must be backward compatible.
+- Events should be designed to be idempotent.
+- Avoid using generic event types; be specific about the domain and action.
+- All events must have a version number.
+- Consider the impact on downstream consumers before making any changes.
+`;
+
 const SYSTEM_PROMPT = `You are an expert reviewer specializing in event-driven architectures.
-Your task is to analyze schema diffs and other architectural information.
+Your task is to analyze schema diffs and other architectural information based on the following EDA rules:
+${EDA_RULES}
 Identify potential breaking changes and assess the overall impact of the proposed changes.
 Please provide a detailed explanation of your findings and a score from 0 to 100, where 0 indicates a very problematic change with high risk of breaking compatibility, and 100 indicates a perfectly safe and well-designed change.
 Format your response as a JSON object with two keys: "explanation" (string) and "score" (number).`;

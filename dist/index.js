@@ -47005,8 +47005,16 @@ const ai_1 = __nccwpck_require__(6619);
 const openai_1 = __nccwpck_require__(7635);
 const zod_1 = __nccwpck_require__(2046);
 const core_1 = __nccwpck_require__(7484);
+const EDA_RULES = `
+- All schema changes must be backward compatible.
+- Events should be designed to be idempotent.
+- Avoid using generic event types; be specific about the domain and action.
+- All events must have a version number.
+- Consider the impact on downstream consumers before making any changes.
+`;
 const SYSTEM_PROMPT = `You are an expert reviewer specializing in event-driven architectures.
-Your task is to analyze schema diffs and other architectural information.
+Your task is to analyze schema diffs and other architectural information based on the following EDA rules:
+${EDA_RULES}
 Identify potential breaking changes and assess the overall impact of the proposed changes.
 Please provide a detailed explanation of your findings and a score from 0 to 100, where 0 indicates a very problematic change with high risk of breaking compatibility, and 100 indicates a perfectly safe and well-designed change.
 Format your response as a JSON object with two keys: "explanation" (string) and "score" (number).`;
@@ -47171,13 +47179,24 @@ repo, // repo is not used directly here anymore
 reviewedFiles, headSha, // headSha is not used directly here anymore
 baseSha, // baseSha is not used directly here anymore
 catalogDirectory) {
-    let commentBody = '## EventCatalog: Detected File Changes\n\n';
+    let commentBody = '## EventCatalog: Governance Review\n\n';
     commentBody += `The following files ${catalogDirectory ? `in '${catalogDirectory}' ` : ''}were modified in this pull request:\n\n`;
     for (const reviewedFile of reviewedFiles) {
         commentBody += `<details><summary><strong>File: ${reviewedFile.filePath}</strong></summary>\n\n`;
         if (reviewedFile.aiReview) {
-            commentBody += '### AI-Powered Review\n';
-            commentBody += `**Score:** ${reviewedFile.aiReview.score}/100\n`;
+            commentBody += '### Review\n';
+            const score = reviewedFile.aiReview.score;
+            let scorePrefix = '';
+            if (score < 25) {
+                scorePrefix = '<span style="color:red;">🚨 Danger</span> ';
+            }
+            else if (score <= 50) {
+                scorePrefix = '<span style="color:orange;">⚠️ Warning</span> ';
+            }
+            else {
+                scorePrefix = '<span style="color:green;">✅ Safe</span> ';
+            }
+            commentBody += `**Score:** ${scorePrefix}${score}/100\n`;
             commentBody += `**Explanation:**\n${reviewedFile.aiReview.explanation.replace(/\n/g, '\n    ')} <!-- Indent explanation for better markdown rendering in details block -->\n\n`;
         }
         else if (reviewedFile.aiError) {

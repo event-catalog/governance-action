@@ -76,15 +76,24 @@ export async function generateCommentBody(
   baseSha: string, // baseSha is not used directly here anymore
   catalogDirectory: string | undefined
 ): Promise<string> {
-  let commentBody = '## EventCatalog: Detected File Changes\n\n';
+  let commentBody = '## EventCatalog: Governance Review\n\n';
   commentBody += `The following files ${catalogDirectory ? `in '${catalogDirectory}' ` : ''}were modified in this pull request:\n\n`;
 
   for (const reviewedFile of reviewedFiles) {
     commentBody += `<details><summary><strong>File: ${reviewedFile.filePath}</strong></summary>\n\n`;
 
     if (reviewedFile.aiReview) {
-      commentBody += '### AI-Powered Review\n';
-      commentBody += `**Score:** ${reviewedFile.aiReview.score}/100\n`;
+      commentBody += '### Review\n';
+      const score = reviewedFile.aiReview.score;
+      let scorePrefix = '';
+      if (score < 25) {
+        scorePrefix = '<span style="color:red;">🚨 Danger</span> ';
+      } else if (score <= 50) {
+        scorePrefix = '<span style="color:orange;">⚠️ Warning</span> ';
+      } else {
+        scorePrefix = '<span style="color:green;">✅ Safe</span> ';
+      }
+      commentBody += `**Score:** ${scorePrefix}${score}/100\n`;
       commentBody += `**Explanation:**\n${reviewedFile.aiReview.explanation.replace(/\n/g, '\n    ')} <!-- Indent explanation for better markdown rendering in details block -->\n\n`;
     } else if (reviewedFile.aiError) {
       commentBody += '### AI-Powered Review\n';
