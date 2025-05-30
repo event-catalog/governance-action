@@ -9,6 +9,17 @@ inputs:
   catalog_directory:
     description: 'The directory where the EventCatalog files are located. If specified, the action will only consider files within this directory.'
     required: false
+  openai_api_key:
+    description: 'OpenAI API key to use for AI processing'
+    required: false
+  model:
+    description: 'The model to use for AI processing. Default is o4-mini.'
+    required: false
+    default: 'o4-mini'
+  provider:
+    description: 'The AI Provider to use for AI processing. Default is openai.'
+    required: false
+    default: 'openai'
 
 runs:
   using: 'node20'

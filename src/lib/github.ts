@@ -7,6 +7,21 @@ interface OctokitFile {
   // Add other properties if needed, or use a more specific type from @octokit/types
 }
 
+// Interface for AI Review data
+export interface AiReview {
+  score: number;
+  explanation: string;
+}
+
+// Interface for a file that has been reviewed (or attempted to be reviewed)
+export interface ReviewedFile {
+  filePath: string;
+  oldFileContent: string;
+  newFileContent: string;
+  aiReview?: AiReview;
+  aiError?: string;
+}
+
 // Helper function to get file content at a specific ref
 export async function getFileContentAtRef(octokit: any, owner: string, repo: string, path: string, ref: string): Promise<string> {
   try {
@@ -27,7 +42,7 @@ export async function getFileContentAtRef(octokit: any, owner: string, repo: str
     }
     return 'Could not retrieve content for this file.';
   } catch (error: any) {
-    core.warning(`Failed to fetch content for ${path} at ref ${ref}: ${error.message}`);
+    core.warning(`Failed to fetch content for ${path} at ref ${ref}: ${error.mreessage}`);
     return `Could not retrieve content (Error: ${error.message})`;
   }
 }
@@ -50,23 +65,44 @@ export async function getChangedFiles(octokit: any, owner: string, repo: string,
 }
 
 // Helper function to generate the comment body
-export async function generateCommentBody(octokit: any, owner: string, repo: string, changedFiles: string[], headSha: string, baseSha: string, catalogDirectory: string | undefined): Promise<string> {
+export async function generateCommentBody(
+  octokit: any, // octokit is not used directly here anymore but kept for consistency if needed elsewhere by caller
+  owner: string, // owner is not used directly here anymore
+
+  
+  repo: string, // repo is not used directly here anymore
+  reviewedFiles: ReviewedFile[], 
+  headSha: string, // headSha is not used directly here anymore
+  baseSha: string, // baseSha is not used directly here anymore
+  catalogDirectory: string | undefined
+): Promise<string> {
   let commentBody = '## EventCatalog: Detected File Changes\n\n';
   commentBody += `The following files ${catalogDirectory ? `in '${catalogDirectory}' ` : ''}were modified in this pull request:\n\n`;
 
-  for (const filePath of changedFiles) {
-    commentBody += `<details><summary><strong>File: ${filePath}</strong></summary>\n\n`;
+  for (const reviewedFile of reviewedFiles) {
+    commentBody += `<details><summary><strong>File: ${reviewedFile.filePath}</strong></summary>\n\n`;
+
+    if (reviewedFile.aiReview) {
+      commentBody += '### AI-Powered Review\n';
+      commentBody += `**Score:** ${reviewedFile.aiReview.score}/100\n`;
+      commentBody += `**Explanation:**\n${reviewedFile.aiReview.explanation.replace(/\n/g, '\n    ')} <!-- Indent explanation for better markdown rendering in details block -->\n\n`;
+    } else if (reviewedFile.aiError) {
+      commentBody += '### AI-Powered Review\n';
+      commentBody += `*AI review could not be generated for this file. Error: ${reviewedFile.aiError}*\n\n`;
+    } else {
+      // Should not happen if logic in index.ts is correct, but good to have a fallback.
+      commentBody += '### AI-Powered Review\n';
+      commentBody += `*AI review data not available for this file.*\n\n`;
+    }
 
     commentBody += '### Content Before PR (Base Branch)\n';
     commentBody += '\`\`\`\n';
-    const oldFileContent = await getFileContentAtRef(octokit, owner, repo, filePath, baseSha);
-    commentBody += `${oldFileContent}\n`;
+    commentBody += `${reviewedFile.oldFileContent}\n`;
     commentBody += '\`\`\`\n\n';
 
     commentBody += '### Content After PR (Head Branch)\n';
     commentBody += '\`\`\`\n';
-    const newFileContent = await getFileContentAtRef(octokit, owner, repo, filePath, headSha);
-    commentBody += `${newFileContent}\n`;
+    commentBody += `${reviewedFile.newFileContent}\n`;
     commentBody += '\`\`\`\n</details>\n\n';
   }
   return commentBody;

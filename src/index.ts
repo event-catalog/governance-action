@@ -1,6 +1,7 @@
 import * as core from '@actions/core';
 import * as github from '@actions/github';
-import { getChangedFiles, generateCommentBody } from './lib/github'; // Updated import path
+import { getChangedFiles, generateCommentBody, getFileContentAtRef, ReviewedFile } from './lib/github'; // Updated import path
+import { askAI } from './lib/ai';
 
 async function run(): Promise<void> {
   try {
@@ -23,15 +24,14 @@ async function run(): Promise<void> {
     const owner = context.repo.owner;
     const repo = context.repo.repo;
     const headSha = context.payload.pull_request.head.sha;
-    const baseSha = context.payload.pull_request.base.sha; // Get the base SHA of the PR
+    const baseSha = context.payload.pull_request.base.sha;
     const issueNumber = context.payload.pull_request.number;
 
-    const changedFiles = await getChangedFiles(octokit, owner, repo, pullRequestNumber, catalogDirectory || undefined);
+    const changedFilePaths = await getChangedFiles(octokit, owner, repo, pullRequestNumber, catalogDirectory || undefined);
 
-    console.log('directory', catalogDirectory);
     core.info(`directory: ${catalogDirectory}`);
 
-    if (changedFiles.length === 0) {
+    if (changedFilePaths.length === 0) {
       if (catalogDirectory) {
         core.info(`No changed files found within the specified directory: ${catalogDirectory}. Action will not comment.`);
       } else {
@@ -46,7 +46,36 @@ async function run(): Promise<void> {
       return;
     }
 
-    const commentBody = await generateCommentBody(octokit, owner, repo, changedFiles, headSha, baseSha, catalogDirectory || undefined);
+    const reviewedFiles: ReviewedFile[] = [];
+
+    for (const filePath of changedFilePaths) {
+      core.info(`Processing file: ${filePath}`);
+      const oldFileContent = await getFileContentAtRef(octokit, owner, repo, filePath, baseSha);
+      const newFileContent = await getFileContentAtRef(octokit, owner, repo, filePath, headSha);
+
+      const promptForAI = `Review the following changes to the file \`${filePath}\`:\n\nOld version (from base branch):\n\`\`\`\n${oldFileContent}\n\`\`\`\n\nNew version (from this PR):\n\`\`\`\n${newFileContent}\n\`\`\`\n\nPlease analyze these changes for potential issues, especially breaking changes if this is a schema or configuration file. Provide your assessment.`;
+
+      let reviewedFileEntry: ReviewedFile = {
+        filePath,
+        oldFileContent,
+        newFileContent,
+      };
+
+      try {
+        core.info(`Requesting AI review for ${filePath}...`);
+        const aiReview = await askAI(promptForAI);
+        core.info(`AI review received for ${filePath}: Score ${aiReview.score}`);
+        reviewedFileEntry.aiReview = aiReview;
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        core.error(`AI review failed for ${filePath}: ${errorMessage}`);
+        reviewedFileEntry.aiError = errorMessage;
+      }
+      reviewedFiles.push(reviewedFileEntry);
+    }
+
+    // Pass the array of ReviewedFile objects to generateCommentBody
+    const commentBody = await generateCommentBody(octokit, owner, repo, reviewedFiles, headSha, baseSha, catalogDirectory || undefined);
 
     await octokit.rest.issues.createComment({
       owner,
