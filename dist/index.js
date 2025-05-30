@@ -47163,6 +47163,25 @@ exports.getChangedFiles = getChangedFiles;
 exports.generateCommentBody = generateCommentBody;
 const core = __importStar(__nccwpck_require__(7484));
 const buffer_1 = __nccwpck_require__(181); // Needed for Buffer.from
+// Helper function to format a section with a title and bulleted list
+function formatSectionAsBulletedList(title, content) {
+    let formattedString = `### ${title}\n`;
+    if (content && content.trim().length > 0) {
+        const items = content.split('\n').map(item => item.trim()).filter(item => item.length > 0);
+        if (items.length > 0) {
+            items.forEach(item => {
+                formattedString += `- ${item}\n`;
+            });
+        }
+        else {
+            formattedString += `No ${title.toLowerCase()} provided.\n`;
+        }
+    }
+    else {
+        formattedString += `No ${title.toLowerCase()} provided.\n`;
+    }
+    return formattedString + '\n';
+}
 // Helper function to get file content at a specific ref
 async function getFileContentAtRef(octokit, owner, repo, path, ref) {
     try {
@@ -47210,9 +47229,11 @@ reviewedFiles, headSha, // headSha is not used directly here anymore
 baseSha, // baseSha is not used directly here anymore
 catalogDirectory) {
     let commentBody = '# EventCatalog: Governance Review\n\n';
-    commentBody += `The following files ${catalogDirectory ? `in \'${catalogDirectory}\' ` : ''}were modified in this pull request:\n\n`;
+    commentBody += `The following files ${catalogDirectory ? `in '${catalogDirectory}' ` : ''}were modified in this pull request:\n\n`;
     for (const reviewedFile of reviewedFiles) {
-        commentBody += `## File: ${reviewedFile.filePath}\n\n`;
+        // Create a clickable link to the file in GitHub
+        const fileUrl = `https://github.com/${owner}/${repo}/blob/${headSha}/${reviewedFile.filePath}`;
+        commentBody += `## File: [${reviewedFile.filePath}](${fileUrl})\n\n`;
         if (reviewedFile.aiReview) {
             const score = reviewedFile.aiReview.score;
             let scorePrefix = '';
@@ -47225,10 +47246,13 @@ catalogDirectory) {
             else {
                 scorePrefix = '<span style="color:green;">✅ Safe</span> ';
             }
-            commentBody += `**Score:** ${scorePrefix}${score}/100\n\n`;
+            // Use a heading for the score to make it larger
+            commentBody += `### **Score:** ${scorePrefix}${score}/100\n\n`;
             commentBody += `**Executive Summary:**\n${reviewedFile.aiReview.executiveSummary}\n\n`;
-            commentBody += `### Detailed Analysis\n${reviewedFile.aiReview.detailedAnalysis}\n\n`;
-            commentBody += `### Recommendations\n${reviewedFile.aiReview.recommendations}\n\n`;
+            // Format Detailed Analysis as a bulleted list
+            commentBody += formatSectionAsBulletedList("Detailed Analysis", reviewedFile.aiReview.detailedAnalysis);
+            // Format Recommendations as a bulleted list
+            commentBody += formatSectionAsBulletedList("Recommendations", reviewedFile.aiReview.recommendations);
         }
         else if (reviewedFile.aiError) {
             commentBody += '### AI-Powered Review\n';

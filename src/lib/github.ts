@@ -24,6 +24,24 @@ export interface ReviewedFile {
   aiError?: string;
 }
 
+// Helper function to format a section with a title and bulleted list
+function formatSectionAsBulletedList(title: string, content: string | undefined | null): string {
+  let formattedString = `### ${title}\n`;
+  if (content && content.trim().length > 0) {
+    const items = content.split('\n').map(item => item.trim()).filter(item => item.length > 0);
+    if (items.length > 0) {
+      items.forEach(item => {
+        formattedString += `- ${item}\n`;
+      });
+    } else {
+      formattedString += `No ${title.toLowerCase()} provided.\n`;
+    }
+  } else {
+    formattedString += `No ${title.toLowerCase()} provided.\n`;
+  }
+  return formattedString + '\n';
+}
+
 // Helper function to get file content at a specific ref
 export async function getFileContentAtRef(octokit: any, owner: string, repo: string, path: string, ref: string): Promise<string> {
   try {
@@ -70,8 +88,6 @@ export async function getChangedFiles(octokit: any, owner: string, repo: string,
 export async function generateCommentBody(
   octokit: any, // octokit is not used directly here anymore but kept for consistency if needed elsewhere by caller
   owner: string, // owner is not used directly here anymore
-
-  
   repo: string, // repo is not used directly here anymore
   reviewedFiles: ReviewedFile[], 
   headSha: string, // headSha is not used directly here anymore
@@ -79,10 +95,12 @@ export async function generateCommentBody(
   catalogDirectory: string | undefined
 ): Promise<string> {
   let commentBody = '# EventCatalog: Governance Review\n\n';
-  commentBody += `The following files ${catalogDirectory ? `in \'${catalogDirectory}\' ` : ''}were modified in this pull request:\n\n`;
+  commentBody += `The following files ${catalogDirectory ? `in '${catalogDirectory}' ` : ''}were modified in this pull request:\n\n`;
 
   for (const reviewedFile of reviewedFiles) {
-    commentBody += `## File: ${reviewedFile.filePath}\n\n`;
+    // Create a clickable link to the file in GitHub
+    const fileUrl = `https://github.com/${owner}/${repo}/blob/${headSha}/${reviewedFile.filePath}`;
+    commentBody += `## File: [${reviewedFile.filePath}](${fileUrl})\n\n`;
 
     if (reviewedFile.aiReview) {
       const score = reviewedFile.aiReview.score;
@@ -94,11 +112,16 @@ export async function generateCommentBody(
       } else {
         scorePrefix = '<span style="color:green;">✅ Safe</span> ';
       }
-      commentBody += `**Score:** ${scorePrefix}${score}/100\n\n`;
+      // Use a heading for the score to make it larger
+      commentBody += `### **Score:** ${scorePrefix}${score}/100\n\n`;
       commentBody += `**Executive Summary:**\n${reviewedFile.aiReview.executiveSummary}\n\n`;
 
-      commentBody += `### Detailed Analysis\n${reviewedFile.aiReview.detailedAnalysis}\n\n`;
-      commentBody += `### Recommendations\n${reviewedFile.aiReview.recommendations}\n\n`;
+      // Format Detailed Analysis as a bulleted list
+      commentBody += formatSectionAsBulletedList("Detailed Analysis", reviewedFile.aiReview.detailedAnalysis);
+      
+      // Format Recommendations as a bulleted list
+      commentBody += formatSectionAsBulletedList("Recommendations", reviewedFile.aiReview.recommendations);
+
     } else if (reviewedFile.aiError) {
       commentBody += '### AI-Powered Review\n';
       commentBody += `*AI review could not be generated for this file. Error: ${reviewedFile.aiError}*\n\n`;
