@@ -1,0 +1,29 @@
+{
+  "name": "@eventcatalog/governance-action",
+  "version": "0.1.0",
+  "description": "A GitHub Action for EventCatalog governance",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "test": "jest"
+  },
+  "keywords": [
+    "github",
+    "actions",
+    "eventcatalog",
+    "governance"
+  ],
+  "author": "EventCatalog",
+  "license": "BSL-1.1",
+  "dependencies": {
+    "@actions/core": "^1.10.0",
+    "@actions/github": "^6.0.0"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.5.0",
+    "@types/node": "^20.12.0",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.1.0",
+    "typescript": "^5.4.5"
+  }
+} 

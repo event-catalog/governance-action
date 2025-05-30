@@ -1,0 +1,16 @@
+name: 'EventCatalog Governance Action'
+description: 'A GitHub Action to enforce EventCatalog governance.'
+author: 'EventCatalog'
+
+inputs:
+  github_token:
+    description: 'GitHub token to interact with the GitHub API'
+    required: true
+
+runs:
+  using: 'node20'
+  main: 'dist/index.js'
+
+branding:
+  icon: 'archive' # Choose an icon from https://feathericons.com/
+  color: 'blue'   # Choose a color 
