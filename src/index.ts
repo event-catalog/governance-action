@@ -7,6 +7,14 @@ async function run(): Promise<void> {
   try {
     const githubToken = core.getInput('github_token', { required: true });
     const catalogDirectory = core.getInput('catalog_directory');
+    const failureThresholdInput = core.getInput('failure_threshold');
+    const failureThreshold = parseInt(failureThresholdInput, 10);
+
+    if (isNaN(failureThreshold) || failureThreshold < 0 || failureThreshold > 100) {
+      core.setFailed('Invalid input for `failure_threshold`. Must be a number between 0 and 100.');
+      return;
+    }
+
     const octokit = github.getOctokit(githubToken);
     const context = github.context;
 
@@ -47,6 +55,8 @@ async function run(): Promise<void> {
     }
 
     const reviewedFiles: ReviewedFile[] = [];
+    let overallLowestScore = 100; // Initialize with the highest possible score
+    let lowScoreFile = '';
 
     for (const filePath of changedFilePaths) {
       core.info(`Processing file: ${filePath}`);
@@ -66,6 +76,10 @@ async function run(): Promise<void> {
         const aiReview = await askAI(promptForAI);
         core.info(`AI review received for ${filePath}: Score ${aiReview.score}`);
         reviewedFileEntry.aiReview = aiReview;
+        if (aiReview.score < overallLowestScore) {
+          overallLowestScore = aiReview.score;
+          lowScoreFile = filePath;
+        }
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
         core.error(`AI review failed for ${filePath}: ${errorMessage}`);
@@ -85,6 +99,11 @@ async function run(): Promise<void> {
     });
 
     core.setOutput('comment-url', `https://github.com/${owner}/${repo}/pull/${issueNumber}#issuecomment-${context.payload.comment?.id}`);
+
+    // Fail the action if any file has a score below the threshold
+    if (overallLowestScore < failureThreshold) {
+      core.setFailed(`Action failed: File '${lowScoreFile}' received an AI review score of ${overallLowestScore}, which is below the threshold of ${failureThreshold}.`);
+    }
 
   } catch (error) {
     if (error instanceof Error) {

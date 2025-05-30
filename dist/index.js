@@ -46916,6 +46916,12 @@ async function run() {
     try {
         const githubToken = core.getInput('github_token', { required: true });
         const catalogDirectory = core.getInput('catalog_directory');
+        const failureThresholdInput = core.getInput('failure_threshold');
+        const failureThreshold = parseInt(failureThresholdInput, 10);
+        if (isNaN(failureThreshold) || failureThreshold < 0 || failureThreshold > 100) {
+            core.setFailed('Invalid input for `failure_threshold`. Must be a number between 0 and 100.');
+            return;
+        }
         const octokit = github.getOctokit(githubToken);
         const context = github.context;
         if (context.eventName !== 'pull_request') {
@@ -46950,6 +46956,8 @@ async function run() {
             return;
         }
         const reviewedFiles = [];
+        let overallLowestScore = 100; // Initialize with the highest possible score
+        let lowScoreFile = '';
         for (const filePath of changedFilePaths) {
             core.info(`Processing file: ${filePath}`);
             const oldFileContent = await (0, github_1.getFileContentAtRef)(octokit, owner, repo, filePath, baseSha);
@@ -46965,6 +46973,10 @@ async function run() {
                 const aiReview = await (0, ai_1.askAI)(promptForAI);
                 core.info(`AI review received for ${filePath}: Score ${aiReview.score}`);
                 reviewedFileEntry.aiReview = aiReview;
+                if (aiReview.score < overallLowestScore) {
+                    overallLowestScore = aiReview.score;
+                    lowScoreFile = filePath;
+                }
             }
             catch (error) {
                 const errorMessage = error instanceof Error ? error.message : String(error);
@@ -46982,6 +46994,10 @@ async function run() {
             body: commentBody,
         });
         core.setOutput('comment-url', `https://github.com/${owner}/${repo}/pull/${issueNumber}#issuecomment-${context.payload.comment?.id}`);
+        // Fail the action if any file has a score below the threshold
+        if (overallLowestScore < failureThreshold) {
+            core.setFailed(`Action failed: File '${lowScoreFile}' received an AI review score of ${overallLowestScore}, which is below the threshold of ${failureThreshold}.`);
+        }
     }
     catch (error) {
         if (error instanceof Error) {
@@ -47012,15 +47028,27 @@ const EDA_RULES = `
 - All events must have a version number.
 - Consider the impact on downstream consumers before making any changes.
 `;
-const SYSTEM_PROMPT = `You are an expert reviewer specializing in event-driven architectures.
-Your task is to analyze schema diffs and other architectural information based on the following EDA rules:
+const SYSTEM_PROMPT = `You are an expert reviewer specializing in event-driven architectures (EDA).
+Your task is to analyze schema diffs and other architectural information based on the provided EDA rules:
 ${EDA_RULES}
-Identify potential breaking changes and assess the overall impact of the proposed changes.
-Please provide a detailed explanation of your findings and a score from 0 to 100, where 0 indicates a very problematic change with high risk of breaking compatibility, and 100 indicates a perfectly safe and well-designed change.
-Format your response as a JSON object with two keys: "explanation" (string) and "score" (number).`;
-// The AiResponseSchema can still be useful for validating the parsed JSON, even if not passed directly to the SDK.
+
+Your audience is enterprise development and architecture teams. Maintain a professional and clear tone.
+
+Provide a detailed assessment covering the following aspects:
+- Overall impact of the changes.
+- Specific breaking changes, if any.
+- Adherence to EDA best practices and the provided rules.
+- Potential risks and considerations for downstream systems.
+
+Format your response as a JSON object with the following keys:
+- "executiveSummary": A concise (2-3 sentences) overview of the most critical findings and the overall risk/impact. This should be suitable for quick ingestion by stakeholders.
+- "detailedAnalysis": A thorough analysis, breaking down observations regarding backward-compatibility, domain impact, adherence to versioning rules, and other architectural notes. Be specific and reference the EDA rules where applicable.
+- "recommendations": Clear, actionable steps to mitigate risks, improve the design, or ensure compatibility. If no issues, suggest affirmations of good practice.
+- "score": A numerical score from 0 to 100, where 0 indicates a very problematic change with high risk of breaking compatibility, and 100 indicates a perfectly safe and well-designed change.`;
 const AiResponseSchema = zod_1.z.object({
-    explanation: zod_1.z.string().describe("Detailed explanation of the findings, including any breaking changes or architectural concerns."),
+    executiveSummary: zod_1.z.string().describe("A concise summary of key findings and overall impact, suitable for quick review by enterprise stakeholders."),
+    detailedAnalysis: zod_1.z.string().describe("A comprehensive breakdown of the review, including specific issues, backward-compatibility impact, domain concerns, adherence to EDA rules, and other architectural notes. This section should be thorough and professional."),
+    recommendations: zod_1.z.string().describe("Actionable recommendations to address identified issues or affirm good practices. Each recommendation should be clear and direct."),
     score: zod_1.z.number().min(0).max(100).describe("A score from 0 to 100, where 0 indicates a very problematic change and 100 indicates a perfectly safe change."),
 });
 // The Vercel AI SDK will automatically look for the OPENAI_API_KEY 
@@ -47031,10 +47059,10 @@ const AiResponseSchema = zod_1.z.object({
 // And then use it in generateText: model: explicitOpenai('gpt-4-turbo')
 /**
  * Asks an AI model to review an architectural change, focusing on event-driven systems.
- * The AI will return an explanation and a score in JSON format.
+ * The AI will return an executive summary, detailed analysis, recommendations, and a score in JSON format.
  *
  * @param promptText The details of the architectural change (e.g., schema diff) to send to the AI.
- * @returns A promise that resolves to an object containing the AI's explanation and score.
+ * @returns A promise that resolves to an object containing the AI's structured review.
  */
 async function askAI(promptText) {
     try {
@@ -47074,7 +47102,9 @@ async function exampleUsage() {
     console.log(`Asking AI to review: ${changeDescription}`);
     const response = await askAI(changeDescription);
     console.log("AI's Review:");
-    console.log(`  Explanation: ${response.explanation}`);
+    console.log(`  Executive Summary: ${response.executiveSummary}`);
+    console.log(`  Detailed Analysis: ${response.detailedAnalysis}`);
+    console.log(`  Recommendations: ${response.recommendations}`);
     console.log(`  Score: ${response.score}`);
   } catch (e) {
     console.error("Example usage failed:", e);
@@ -47190,14 +47220,18 @@ catalogDirectory) {
             if (score < 25) {
                 scorePrefix = '<span style="color:red;">🚨 Danger</span> ';
             }
-            else if (score <= 50) {
+            else if (score < 75) {
                 scorePrefix = '<span style="color:orange;">⚠️ Warning</span> ';
             }
             else {
                 scorePrefix = '<span style="color:green;">✅ Safe</span> ';
             }
-            commentBody += `**Score:** ${scorePrefix}${score}/100\n`;
-            commentBody += `**Explanation:**\n${reviewedFile.aiReview.explanation.replace(/\n/g, '\n    ')} <!-- Indent explanation for better markdown rendering in details block -->\n\n`;
+            commentBody += `**Score:** ${scorePrefix}${score}/100\n\n`;
+            commentBody += `**Executive Summary:**\n${reviewedFile.aiReview.executiveSummary.replace(/\n/g, '\n    ')}\n\n`;
+            commentBody += `<details><summary><strong>Detailed Analysis & Recommendations</strong></summary>\n\n`;
+            commentBody += `**Detailed Analysis:**\n${reviewedFile.aiReview.detailedAnalysis.replace(/\n/g, '\n    ')}\n\n`;
+            commentBody += `**Recommendations:**\n${reviewedFile.aiReview.recommendations.replace(/\n/g, '\n    ')}\n\n`;
+            commentBody += `</details>\n\n`;
         }
         else if (reviewedFile.aiError) {
             commentBody += '### AI-Powered Review\n';

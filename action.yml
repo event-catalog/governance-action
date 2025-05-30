@@ -20,6 +20,10 @@ inputs:
     description: 'The AI Provider to use for AI processing. Default is openai.'
     required: false
     default: 'openai'
+  failure_threshold:
+    description: 'The AI review score below which the action will fail. Default is 25.'
+    required: false
+    default: '25'
 
 runs:
   using: 'node20'

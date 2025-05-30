@@ -7,10 +7,12 @@ interface OctokitFile {
   // Add other properties if needed, or use a more specific type from @octokit/types
 }
 
-// Interface for AI Review data
+// Interface for AI Review data (matching the updated AiResponseSchema in ai.ts)
 export interface AiReview {
+  executiveSummary: string;
+  detailedAnalysis: string;
+  recommendations: string;
   score: number;
-  explanation: string;
 }
 
 // Interface for a file that has been reviewed (or attempted to be reviewed)
@@ -88,13 +90,18 @@ export async function generateCommentBody(
       let scorePrefix = '';
       if (score < 25) {
         scorePrefix = '<span style="color:red;">🚨 Danger</span> ';
-      } else if (score <= 50) {
+      } else if (score < 75) {
         scorePrefix = '<span style="color:orange;">⚠️ Warning</span> ';
       } else {
         scorePrefix = '<span style="color:green;">✅ Safe</span> ';
       }
-      commentBody += `**Score:** ${scorePrefix}${score}/100\n`;
-      commentBody += `**Explanation:**\n${reviewedFile.aiReview.explanation.replace(/\n/g, '\n    ')} <!-- Indent explanation for better markdown rendering in details block -->\n\n`;
+      commentBody += `**Score:** ${scorePrefix}${score}/100\n\n`;
+      commentBody += `**Executive Summary:**\n${reviewedFile.aiReview.executiveSummary.replace(/\n/g, '\n    ')}\n\n`;
+
+      commentBody += `<details><summary><strong>Detailed Analysis & Recommendations</strong></summary>\n\n`;
+      commentBody += `**Detailed Analysis:**\n${reviewedFile.aiReview.detailedAnalysis.replace(/\n/g, '\n    ')}\n\n`;
+      commentBody += `**Recommendations:**\n${reviewedFile.aiReview.recommendations.replace(/\n/g, '\n    ')}\n\n`;
+      commentBody += `</details>\n\n`;
     } else if (reviewedFile.aiError) {
       commentBody += '### AI-Powered Review\n';
       commentBody += `*AI review could not be generated for this file. Error: ${reviewedFile.aiError}*\n\n`;
