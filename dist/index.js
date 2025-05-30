@@ -46986,7 +46986,7 @@ async function run() {
             reviewedFiles.push(reviewedFileEntry);
         }
         // Pass the array of ReviewedFile objects to generateCommentBody
-        const commentBody = await (0, github_1.generateCommentBody)(octokit, owner, repo, reviewedFiles, headSha, baseSha, catalogDirectory || undefined);
+        const commentBody = await (0, github_1.generateCommentBody)(octokit, owner, repo, pullRequestNumber, reviewedFiles, headSha, baseSha, catalogDirectory || undefined);
         await octokit.rest.issues.createComment({
             owner,
             repo,
@@ -47241,12 +47241,13 @@ async function getChangedFiles(octokit, owner, repo, pullRequestNumber, catalogD
 }
 // Helper function to generate the comment body
 async function generateCommentBody(octokit, // octokit is not used directly here anymore but kept for consistency if needed elsewhere by caller
-owner, repo, reviewedFiles, headSha, baseSha, // baseSha is not used directly here anymore
+owner, repo, pullRequestNumber, reviewedFiles, headSha, baseSha, // baseSha is not used directly here anymore
 catalogDirectory) {
     let commentBody = '# EventCatalog: Governance Review\n\n';
     commentBody += `The following files ${catalogDirectory ? `in \'${catalogDirectory}\' ` : ''}were modified in this pull request:\n\n`;
     for (const reviewedFile of reviewedFiles) {
-        const fileUrl = `https://github.com/${owner}/${repo}/blob/${headSha}/${reviewedFile.filePath}`;
+        // Link to the file diff in the PR
+        const fileDiffLink = `https://github.com/${owner}/${repo}/pull/${pullRequestNumber}/files#${encodeURIComponent(reviewedFile.filePath)}`;
         if (reviewedFile.aiReview) {
             const score = reviewedFile.aiReview.score;
             let scorePrefix = '';
@@ -47261,8 +47262,8 @@ catalogDirectory) {
             }
             // 1. Score
             commentBody += `### **Score:** ${scorePrefix}${score}/100\n\n`;
-            // 2. File link (small) - now after score
-            commentBody += `<sub>File: [${reviewedFile.filePath}](${fileUrl})</sub>\n\n`;
+            // 2. File link (small) - now points to PR diff
+            commentBody += `<sub>File: [${reviewedFile.filePath}](${fileDiffLink})</sub>\n\n`;
             // 3. Executive Summary
             commentBody += `**Executive Summary:**\n${reviewedFile.aiReview.executiveSummary}\n\n`;
             // 4. Detailed Analysis
@@ -47272,7 +47273,7 @@ catalogDirectory) {
         }
         else {
             // No AI Review. File link is the primary intro, but small.
-            commentBody += `<sub>File: [${reviewedFile.filePath}](${fileUrl})</sub>\n\n`; // Small file link
+            commentBody += `<sub>File: [${reviewedFile.filePath}](${fileDiffLink})</sub>\n\n`; // Small file link to diff
             // Then the error or "not available" message
             commentBody += '##### AI-Powered Review\n'; // Keep sub-heading for this message block
             if (reviewedFile.aiError) {
@@ -47284,15 +47285,6 @@ catalogDirectory) {
 `;
             }
         }
-        commentBody += '### Content Before PR (Base Branch)\n';
-        commentBody += '\`\`\`\n';
-        commentBody += `${reviewedFile.oldFileContent}\n`;
-        commentBody += '\`\`\`\n\n';
-        commentBody += '### Content After PR (Head Branch)\n';
-        commentBody += '\`\`\`\n';
-        commentBody += `${reviewedFile.newFileContent}\n`;
-        commentBody += '\`\`\`\n\n';
-        commentBody += '---\n\n';
     }
     return commentBody;
 }

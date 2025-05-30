@@ -106,8 +106,9 @@ export async function generateCommentBody(
   octokit: any, // octokit is not used directly here anymore but kept for consistency if needed elsewhere by caller
   owner: string, 
   repo: string, 
+  pullRequestNumber: number,
   reviewedFiles: ReviewedFile[], 
-  headSha: string, 
+  headSha: string,
   baseSha: string, // baseSha is not used directly here anymore
   catalogDirectory: string | undefined
 ): Promise<string> {
@@ -115,7 +116,8 @@ export async function generateCommentBody(
   commentBody += `The following files ${catalogDirectory ? `in \'${catalogDirectory}\' ` : ''}were modified in this pull request:\n\n`;
 
   for (const reviewedFile of reviewedFiles) {
-    const fileUrl = `https://github.com/${owner}/${repo}/blob/${headSha}/${reviewedFile.filePath}`;
+    // Link to the file diff in the PR
+    const fileDiffLink = `https://github.com/${owner}/${repo}/pull/${pullRequestNumber}/files#${encodeURIComponent(reviewedFile.filePath)}`;
 
     if (reviewedFile.aiReview) {
       const score = reviewedFile.aiReview.score;
@@ -129,8 +131,8 @@ export async function generateCommentBody(
       }
       // 1. Score
       commentBody += `### **Score:** ${scorePrefix}${score}/100\n\n`;
-      // 2. File link (small) - now after score
-      commentBody += `<sub>File: [${reviewedFile.filePath}](${fileUrl})</sub>\n\n`;
+      // 2. File link (small) - now points to PR diff
+      commentBody += `<sub>File: [${reviewedFile.filePath}](${fileDiffLink})</sub>\n\n`;
       
       // 3. Executive Summary
       commentBody += `**Executive Summary:**\n${reviewedFile.aiReview.executiveSummary}\n\n`;
@@ -143,7 +145,7 @@ export async function generateCommentBody(
 
     } else {
       // No AI Review. File link is the primary intro, but small.
-      commentBody += `<sub>File: [${reviewedFile.filePath}](${fileUrl})</sub>\n\n`; // Small file link
+      commentBody += `<sub>File: [${reviewedFile.filePath}](${fileDiffLink})</sub>\n\n`; // Small file link to diff
       
       // Then the error or "not available" message
       commentBody += '##### AI-Powered Review\n'; // Keep sub-heading for this message block
@@ -155,17 +157,6 @@ export async function generateCommentBody(
 `;
       }
     }
-
-    commentBody += '### Content Before PR (Base Branch)\n';
-    commentBody += '\`\`\`\n';
-    commentBody += `${reviewedFile.oldFileContent}\n`;
-    commentBody += '\`\`\`\n\n';
-
-    commentBody += '### Content After PR (Head Branch)\n';
-    commentBody += '\`\`\`\n';
-    commentBody += `${reviewedFile.newFileContent}\n`;
-    commentBody += '\`\`\`\n\n';
-    commentBody += '---\n\n';
   }
   return commentBody;
 } 

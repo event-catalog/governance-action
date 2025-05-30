@@ -89,7 +89,7 @@ async function run(): Promise<void> {
     }
 
     // Pass the array of ReviewedFile objects to generateCommentBody
-    const commentBody = await generateCommentBody(octokit, owner, repo, reviewedFiles, headSha, baseSha, catalogDirectory || undefined);
+    const commentBody = await generateCommentBody(octokit, owner, repo, pullRequestNumber, reviewedFiles, headSha, baseSha, catalogDirectory || undefined);
 
     await octokit.rest.issues.createComment({
       owner,
