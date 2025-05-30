@@ -32,6 +32,9 @@ async function run(): Promise<void> {
 
     let changedFiles = files.map(file => file.filename);
 
+    console.log('directory', catalogDirectory);
+    core.info(`directory: ${catalogDirectory}`);
+
     if (catalogDirectory) {
       core.info(`Filtering changed files for directory: ${catalogDirectory}`);
       changedFiles = changedFiles.filter(file => file.startsWith(catalogDirectory));
