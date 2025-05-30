@@ -9,7 +9,7 @@ inputs:
   catalog_directory:
     description: 'The directory where the EventCatalog files are located. If specified, the action will only consider files within this directory.'
     required: false
-  openai_api_key:
+  OPENAI_API_KEY:
     description: 'OpenAI API key to use for AI processing'
     required: false
   model:
