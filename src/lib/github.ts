@@ -112,7 +112,7 @@ export async function generateCommentBody(
   baseSha: string, // baseSha is not used directly here anymore
   catalogDirectory: string | undefined
 ): Promise<string> {
-  let commentBody = '# EventCatalog: Governance Review\n\n';
+  let commentBody = '# EventCatalog: Schema Review\n\n';
   commentBody += `The following files ${catalogDirectory ? `in \'${catalogDirectory}\' ` : ''}were modified in this pull request:\n\n`;
 
   for (const reviewedFile of reviewedFiles) {

@@ -47243,7 +47243,7 @@ async function getChangedFiles(octokit, owner, repo, pullRequestNumber, catalogD
 async function generateCommentBody(octokit, // octokit is not used directly here anymore but kept for consistency if needed elsewhere by caller
 owner, repo, pullRequestNumber, reviewedFiles, headSha, baseSha, // baseSha is not used directly here anymore
 catalogDirectory) {
-    let commentBody = '# EventCatalog: Governance Review\n\n';
+    let commentBody = '# EventCatalog: Schema Review\n\n';
     commentBody += `The following files ${catalogDirectory ? `in \'${catalogDirectory}\' ` : ''}were modified in this pull request:\n\n`;
     for (const reviewedFile of reviewedFiles) {
         // Link to the file diff in the PR
