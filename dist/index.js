@@ -29956,6 +29956,7 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 const core = __importStar(__nccwpck_require__(7484));
 const github = __importStar(__nccwpck_require__(3228));
+const github_1 = __nccwpck_require__(3848); // Updated import path
 async function run() {
     try {
         const githubToken = core.getInput('github_token', { required: true });
@@ -29973,73 +29974,28 @@ async function run() {
         const pullRequestNumber = context.payload.pull_request.number;
         const owner = context.repo.owner;
         const repo = context.repo.repo;
-        const headSha = context.payload.pull_request.head.sha; // Get the head SHA of the PR
-        const issueNumber = context.payload.pull_request.number; // Defined issueNumber earlier
-        const { data: files } = await octokit.rest.pulls.listFiles({
-            owner,
-            repo,
-            pull_number: pullRequestNumber,
-        });
-        let changedFiles = files.map(file => file.filename);
+        const headSha = context.payload.pull_request.head.sha;
+        const baseSha = context.payload.pull_request.base.sha; // Get the base SHA of the PR
+        const issueNumber = context.payload.pull_request.number;
+        const changedFiles = await (0, github_1.getChangedFiles)(octokit, owner, repo, pullRequestNumber, catalogDirectory || undefined);
         console.log('directory', catalogDirectory);
         core.info(`directory: ${catalogDirectory}`);
-        if (catalogDirectory) {
-            core.info(`Filtering changed files for directory: ${catalogDirectory}`);
-            changedFiles = changedFiles.filter(file => file.startsWith(catalogDirectory));
-            if (changedFiles.length === 0) {
-                core.info(`No changed files found within the specified directory: ${catalogDirectory}. Action will not comment.`);
-                return; // Silently exit if no files in specified directory
-            }
-        }
-        // If catalogDirectory was specified and led to no files, we've returned.
-        // So, if changedFiles is empty here, it means no catalogDirectory was given AND no files changed in the PR.
         if (changedFiles.length === 0) {
-            core.info('No files changed in this pull request.');
-            await octokit.rest.issues.createComment({
-                owner,
-                repo,
-                issue_number: issueNumber,
-                body: '## EventCatalog: Detected File Changes\n\nNo files were changed in this pull request.',
-            });
-            return;
-        }
-        // At this point, changedFiles.length > 0 is guaranteed.
-        let commentBody = '## EventCatalog: Detected File Changes\n\n';
-        commentBody += `The following files ${catalogDirectory ? `in '${catalogDirectory}' ` : ''}were modified in this pull request:\n\n`;
-        for (const filePath of changedFiles) {
-            commentBody += `<details><summary><strong>File: ${filePath}</strong></summary>\n\n\`\`\`\n`;
-            try {
-                const { data: contentResponse } = await octokit.rest.repos.getContent({
+            if (catalogDirectory) {
+                core.info(`No changed files found within the specified directory: ${catalogDirectory}. Action will not comment.`);
+            }
+            else {
+                core.info('No files changed in this pull request.');
+                await octokit.rest.issues.createComment({
                     owner,
                     repo,
-                    path: filePath,
-                    ref: headSha,
+                    issue_number: issueNumber,
+                    body: '## EventCatalog: Detected File Changes\n\nNo files were changed in this pull request.',
                 });
-                let fileContent = '';
-                if ('content' in contentResponse && contentResponse.content) {
-                    if (contentResponse.encoding === 'base64') {
-                        fileContent = Buffer.from(contentResponse.content, 'base64').toString('utf-8');
-                    }
-                    else {
-                        fileContent = contentResponse.content;
-                    }
-                }
-                else if (Array.isArray(contentResponse)) {
-                    fileContent = 'This is a directory, content not displayed.';
-                }
-                else {
-                    fileContent = 'Could not retrieve content for this file.';
-                }
-                commentBody += `${fileContent}\n`;
             }
-            catch (error) {
-                // @ts-ignore
-                core.warning(`Failed to fetch content for ${filePath}: ${error.message}`);
-                // @ts-ignore
-                commentBody += `Could not retrieve content (Error: ${error.message})\n`;
-            }
-            commentBody += '\`\`\`\n</details>\n\n';
+            return;
         }
+        const commentBody = await (0, github_1.generateCommentBody)(octokit, owner, repo, changedFiles, headSha, baseSha, catalogDirectory || undefined);
         await octokit.rest.issues.createComment({
             owner,
             repo,
@@ -30055,6 +30011,112 @@ async function run() {
     }
 }
 run();
+
+
+/***/ }),
+
+/***/ 3848:
+/***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
+
+"use strict";
+
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.getFileContentAtRef = getFileContentAtRef;
+exports.getChangedFiles = getChangedFiles;
+exports.generateCommentBody = generateCommentBody;
+const core = __importStar(__nccwpck_require__(7484));
+const buffer_1 = __nccwpck_require__(181); // Needed for Buffer.from
+// Helper function to get file content at a specific ref
+async function getFileContentAtRef(octokit, owner, repo, path, ref) {
+    try {
+        const { data: contentResponse } = await octokit.rest.repos.getContent({
+            owner,
+            repo,
+            path,
+            ref,
+        });
+        if ('content' in contentResponse && contentResponse.content) {
+            if (contentResponse.encoding === 'base64') {
+                return buffer_1.Buffer.from(contentResponse.content, 'base64').toString('utf-8');
+            }
+            return contentResponse.content;
+        }
+        else if (Array.isArray(contentResponse)) {
+            return 'This is a directory, content not displayed.';
+        }
+        return 'Could not retrieve content for this file.';
+    }
+    catch (error) {
+        core.warning(`Failed to fetch content for ${path} at ref ${ref}: ${error.message}`);
+        return `Could not retrieve content (Error: ${error.message})`;
+    }
+}
+// Helper function to get changed files in a PR
+async function getChangedFiles(octokit, owner, repo, pullRequestNumber, catalogDirectory) {
+    const { data: files } = await octokit.rest.pulls.listFiles({
+        owner,
+        repo,
+        pull_number: pullRequestNumber,
+    });
+    let changedFiles = files.map((file) => file.filename);
+    if (catalogDirectory) {
+        core.info(`Filtering changed files for directory: ${catalogDirectory}`);
+        changedFiles = changedFiles.filter((file) => file.startsWith(catalogDirectory));
+    }
+    return changedFiles;
+}
+// Helper function to generate the comment body
+async function generateCommentBody(octokit, owner, repo, changedFiles, headSha, baseSha, catalogDirectory) {
+    let commentBody = '## EventCatalog: Detected File Changes\n\n';
+    commentBody += `The following files ${catalogDirectory ? `in '${catalogDirectory}' ` : ''}were modified in this pull request:\n\n`;
+    for (const filePath of changedFiles) {
+        commentBody += `<details><summary><strong>File: ${filePath}</strong></summary>\n\n`;
+        commentBody += '### Content Before PR (Base Branch)\n';
+        commentBody += '\`\`\`\n';
+        const oldFileContent = await getFileContentAtRef(octokit, owner, repo, filePath, baseSha);
+        commentBody += `${oldFileContent}\n`;
+        commentBody += '\`\`\`\n\n';
+        commentBody += '### Content After PR (Head Branch)\n';
+        commentBody += '\`\`\`\n';
+        const newFileContent = await getFileContentAtRef(octokit, owner, repo, filePath, headSha);
+        commentBody += `${newFileContent}\n`;
+        commentBody += '\`\`\`\n</details>\n\n';
+    }
+    return commentBody;
+}
 
 
 /***/ }),
