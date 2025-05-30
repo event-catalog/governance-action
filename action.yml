@@ -6,6 +6,9 @@ inputs:
   github_token:
     description: 'GitHub token to interact with the GitHub API'
     required: true
+  catalog_directory:
+    description: 'The directory where the EventCatalog files are located. If specified, the action will only consider files within this directory.'
+    required: false
 
 runs:
   using: 'node20'
