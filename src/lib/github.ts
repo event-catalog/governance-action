@@ -78,14 +78,13 @@ export async function generateCommentBody(
   baseSha: string, // baseSha is not used directly here anymore
   catalogDirectory: string | undefined
 ): Promise<string> {
-  let commentBody = '## EventCatalog: Governance Review\n\n';
-  commentBody += `The following files ${catalogDirectory ? `in '${catalogDirectory}' ` : ''}were modified in this pull request:\n\n`;
+  let commentBody = '# EventCatalog: Governance Review\n\n';
+  commentBody += `The following files ${catalogDirectory ? `in \'${catalogDirectory}\' ` : ''}were modified in this pull request:\n\n`;
 
   for (const reviewedFile of reviewedFiles) {
-    commentBody += `<details><summary><strong>File: ${reviewedFile.filePath}</strong></summary>\n\n`;
+    commentBody += `## File: ${reviewedFile.filePath}\n\n`;
 
     if (reviewedFile.aiReview) {
-      commentBody += '### Review\n';
       const score = reviewedFile.aiReview.score;
       let scorePrefix = '';
       if (score < 25) {
@@ -96,17 +95,14 @@ export async function generateCommentBody(
         scorePrefix = '<span style="color:green;">✅ Safe</span> ';
       }
       commentBody += `**Score:** ${scorePrefix}${score}/100\n\n`;
-      commentBody += `**Executive Summary:**\n${reviewedFile.aiReview.executiveSummary.replace(/\n/g, '\n    ')}\n\n`;
+      commentBody += `**Executive Summary:**\n${reviewedFile.aiReview.executiveSummary}\n\n`;
 
-      commentBody += `<details><summary><strong>Detailed Analysis & Recommendations</strong></summary>\n\n`;
-      commentBody += `**Detailed Analysis:**\n${reviewedFile.aiReview.detailedAnalysis.replace(/\n/g, '\n    ')}\n\n`;
-      commentBody += `**Recommendations:**\n${reviewedFile.aiReview.recommendations.replace(/\n/g, '\n    ')}\n\n`;
-      commentBody += `</details>\n\n`;
+      commentBody += `### Detailed Analysis\n${reviewedFile.aiReview.detailedAnalysis}\n\n`;
+      commentBody += `### Recommendations\n${reviewedFile.aiReview.recommendations}\n\n`;
     } else if (reviewedFile.aiError) {
       commentBody += '### AI-Powered Review\n';
       commentBody += `*AI review could not be generated for this file. Error: ${reviewedFile.aiError}*\n\n`;
     } else {
-      // Should not happen if logic in index.ts is correct, but good to have a fallback.
       commentBody += '### AI-Powered Review\n';
       commentBody += `*AI review data not available for this file.*\n\n`;
     }
@@ -119,7 +115,8 @@ export async function generateCommentBody(
     commentBody += '### Content After PR (Head Branch)\n';
     commentBody += '\`\`\`\n';
     commentBody += `${reviewedFile.newFileContent}\n`;
-    commentBody += '\`\`\`\n</details>\n\n';
+    commentBody += '\`\`\`\n\n';
+    commentBody += '---\n\n';
   }
   return commentBody;
 } 
