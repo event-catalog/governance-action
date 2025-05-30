@@ -47165,22 +47165,40 @@ const core = __importStar(__nccwpck_require__(7484));
 const buffer_1 = __nccwpck_require__(181); // Needed for Buffer.from
 // Helper function to format a section with a title and bulleted list
 function formatSectionAsBulletedList(title, content) {
-    let formattedString = `### ${title}\n`;
+    let sectionString = `### ${title}\n`; // Section title
     if (content && content.trim().length > 0) {
-        const items = content.split('\n').map(item => item.trim()).filter(item => item.length > 0);
-        if (items.length > 0) {
-            items.forEach(item => {
-                formattedString += `- ${item}\n`;
-            });
-        }
-        else {
-            formattedString += `No ${title.toLowerCase()} provided.\n`;
+        const lines = content.split('\n');
+        let hasActualContent = false;
+        lines.forEach(line => {
+            // Preserve leading spaces on the original line for potential markdown indentation, trim trailing.
+            const originalLineWithPreservedIndentation = line.trimEnd();
+            if (originalLineWithPreservedIndentation.trim().length > 0) { // Check if the line has non-whitespace characters
+                hasActualContent = true;
+                // Regex to check if the line already starts with a common list marker
+                // Markers: *, -, +, digits., roman numerals., o. (followed by a space)
+                const listMarkerRegex = /^\s*([*\-+]|o|[0-9]+\.|[ivxlcdm]+\.)\s+/i;
+                if (listMarkerRegex.test(originalLineWithPreservedIndentation)) {
+                    sectionString += `${originalLineWithPreservedIndentation}\n`; // Pass through if already formatted
+                }
+                else {
+                    // If not an existing list item, make it a primary bullet.
+                    // trimStart() to remove leading spaces before adding our own bullet.
+                    sectionString += `- ${originalLineWithPreservedIndentation.trimStart()}\n`;
+                }
+            }
+            else {
+                // Add empty lines back if they were in the original content, might be for spacing.
+                sectionString += `${line}\n`;
+            }
+        });
+        if (!hasActualContent) {
+            sectionString += `No ${title.toLowerCase()} provided (content was empty or whitespace only).\n`;
         }
     }
     else {
-        formattedString += `No ${title.toLowerCase()} provided.\n`;
+        sectionString += `No ${title.toLowerCase()} provided.\n`;
     }
-    return formattedString + '\n';
+    return sectionString + '\n'; // Extra newline after the section
 }
 // Helper function to get file content at a specific ref
 async function getFileContentAtRef(octokit, owner, repo, path, ref) {
@@ -47223,17 +47241,12 @@ async function getChangedFiles(octokit, owner, repo, pullRequestNumber, catalogD
 }
 // Helper function to generate the comment body
 async function generateCommentBody(octokit, // octokit is not used directly here anymore but kept for consistency if needed elsewhere by caller
-owner, // owner is not used directly here anymore
-repo, // repo is not used directly here anymore
-reviewedFiles, headSha, // headSha is not used directly here anymore
-baseSha, // baseSha is not used directly here anymore
+owner, repo, reviewedFiles, headSha, baseSha, // baseSha is not used directly here anymore
 catalogDirectory) {
     let commentBody = '# EventCatalog: Governance Review\n\n';
-    commentBody += `The following files ${catalogDirectory ? `in '${catalogDirectory}' ` : ''}were modified in this pull request:\n\n`;
+    commentBody += `The following files ${catalogDirectory ? `in \'${catalogDirectory}\' ` : ''}were modified in this pull request:\n\n`;
     for (const reviewedFile of reviewedFiles) {
-        // Create a clickable link to the file in GitHub
         const fileUrl = `https://github.com/${owner}/${repo}/blob/${headSha}/${reviewedFile.filePath}`;
-        commentBody += `## File: [${reviewedFile.filePath}](${fileUrl})\n\n`;
         if (reviewedFile.aiReview) {
             const score = reviewedFile.aiReview.score;
             let scorePrefix = '';
@@ -47246,21 +47259,30 @@ catalogDirectory) {
             else {
                 scorePrefix = '<span style="color:green;">✅ Safe</span> ';
             }
-            // Use a heading for the score to make it larger
+            // 1. Score
             commentBody += `### **Score:** ${scorePrefix}${score}/100\n\n`;
+            // 2. File link (small) - now after score
+            commentBody += `<sub>File: [${reviewedFile.filePath}](${fileUrl})</sub>\n\n`;
+            // 3. Executive Summary
             commentBody += `**Executive Summary:**\n${reviewedFile.aiReview.executiveSummary}\n\n`;
-            // Format Detailed Analysis as a bulleted list
+            // 4. Detailed Analysis
             commentBody += formatSectionAsBulletedList("Detailed Analysis", reviewedFile.aiReview.detailedAnalysis);
-            // Format Recommendations as a bulleted list
+            // 5. Recommendations
             commentBody += formatSectionAsBulletedList("Recommendations", reviewedFile.aiReview.recommendations);
         }
-        else if (reviewedFile.aiError) {
-            commentBody += '### AI-Powered Review\n';
-            commentBody += `*AI review could not be generated for this file. Error: ${reviewedFile.aiError}*\n\n`;
-        }
         else {
-            commentBody += '### AI-Powered Review\n';
-            commentBody += `*AI review data not available for this file.*\n\n`;
+            // No AI Review. File link is the primary intro, but small.
+            commentBody += `<sub>File: [${reviewedFile.filePath}](${fileUrl})</sub>\n\n`; // Small file link
+            // Then the error or "not available" message
+            commentBody += '##### AI-Powered Review\n'; // Keep sub-heading for this message block
+            if (reviewedFile.aiError) {
+                commentBody += `*AI review could not be generated for this file. Error: ${reviewedFile.aiError}*\n\n`;
+            }
+            else { // aiReview is falsy but not an aiError, so "not available"
+                commentBody += `*AI review data not available for this file.*
+
+`;
+            }
         }
         commentBody += '### Content Before PR (Base Branch)\n';
         commentBody += '\`\`\`\n';
