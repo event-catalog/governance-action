@@ -47042,13 +47042,13 @@ Provide a detailed assessment covering the following aspects:
 
 Format your response as a JSON object with the following keys:
 - "executiveSummary": A concise (2-3 sentences) overview of the most critical findings and the overall risk/impact. This should be suitable for quick ingestion by stakeholders.
-- "detailedAnalysis": A thorough analysis, breaking down observations regarding backward-compatibility, domain impact, adherence to versioning rules, and other architectural notes. Be specific and reference the EDA rules where applicable.
-- "recommendations": Clear, actionable steps to mitigate risks, improve the design, or ensure compatibility. If no issues, suggest affirmations of good practice.
+- "detailedAnalysis": A thorough analysis, breaking down observations regarding backward-compatibility, domain impact, adherence to versioning rules, and other architectural notes. Be specific and reference the EDA rules where applicable. Ensure that any lists are formatted using Markdown syntax (e.g., use hyphens \`-\` or asterisks \`*\` for bullet points, and indent for sub-lists).
+- "recommendations": Clear, actionable steps to mitigate risks, improve the design, or ensure compatibility. If no issues, suggest affirmations of good practice. Ensure that any lists are formatted using Markdown syntax (e.g., use hyphens \`-\` or asterisks \`*\` for bullet points, and indent for sub-lists).
 - "score": A numerical score from 0 to 100, where 0 indicates a very problematic change with high risk of breaking compatibility, and 100 indicates a perfectly safe and well-designed change.`;
 const AiResponseSchema = zod_1.z.object({
     executiveSummary: zod_1.z.string().describe("A concise summary of key findings and overall impact, suitable for quick review by enterprise stakeholders."),
-    detailedAnalysis: zod_1.z.string().describe("A comprehensive breakdown of the review, including specific issues, backward-compatibility impact, domain concerns, adherence to EDA rules, and other architectural notes. This section should be thorough and professional."),
-    recommendations: zod_1.z.string().describe("Actionable recommendations to address identified issues or affirm good practices. Each recommendation should be clear and direct."),
+    detailedAnalysis: zod_1.z.string().describe("A comprehensive breakdown of the review, including specific issues, backward-compatibility impact, domain concerns, adherence to EDA rules, and other architectural notes. This section should be thorough and professional. Use Markdown for any lists (e.g., hyphens or asterisks for bullet points, indentation for sub-lists)."),
+    recommendations: zod_1.z.string().describe("Actionable recommendations to address identified issues or affirm good practices. Each recommendation should be clear and direct. Use Markdown for any lists (e.g., hyphens or asterisks for bullet points, indentation for sub-lists)."),
     score: zod_1.z.number().min(0).max(100).describe("A score from 0 to 100, where 0 indicates a very problematic change and 100 indicates a perfectly safe change."),
 });
 // The Vercel AI SDK will automatically look for the OPENAI_API_KEY 
