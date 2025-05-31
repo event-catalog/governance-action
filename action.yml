@@ -3,6 +3,10 @@ description: 'A GitHub Action to enforce EventCatalog governance.'
 author: 'EventCatalog'
 
 inputs:
+  task:
+    description: 'The task to perform. Default is "schema_review".'
+    required: false
+    default: 'schema_review'
   github_token:
     description: 'GitHub token to interact with the GitHub API'
     required: true

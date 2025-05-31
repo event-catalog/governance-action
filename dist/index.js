@@ -46910,19 +46910,24 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 const core = __importStar(__nccwpck_require__(7484));
 const github = __importStar(__nccwpck_require__(3228));
-const github_1 = __nccwpck_require__(3848); // Updated import path
-const ai_1 = __nccwpck_require__(1977);
+const github_1 = __nccwpck_require__(3848); // Updated import
+// import { askAI } from './lib/ai'; // No longer directly used
 const promises_1 = __nccwpck_require__(1943);
+const schema_review_1 = __nccwpck_require__(7376); // Import the new function and type
+const VALID_TASKS = ['schema_review', 'config_review'];
 async function run() {
     try {
         const githubToken = core.getInput('github_token', { required: true });
         const failureThresholdInput = core.getInput('failure_threshold');
         const failureThreshold = parseInt(failureThresholdInput, 10);
-        // Log folders in the catalog directory
+        const task = core.getInput('task');
+        if (!VALID_TASKS.includes(task)) {
+            core.setFailed(`Invalid input for \`task\`. Must be one of: ${VALID_TASKS.join(', ')}.`);
+            return;
+        }
         const catalogDirectory = core.getInput('catalog_directory');
         if (catalogDirectory) {
             core.info(`Catalog directory: ${catalogDirectory}`);
-            // Read the directory and log the files
             const files = await (0, promises_1.readdir)(catalogDirectory);
             core.info(`Files in catalog directory: ${files.join(', ')}`);
         }
@@ -46935,69 +46940,22 @@ async function run() {
         }
         const octokit = github.getOctokit(githubToken);
         const context = github.context;
-        if (context.eventName !== 'pull_request') {
-            core.setFailed('This action can only be run on pull_request events.');
-            return;
+        // Perform initial checks and get changed files
+        const { changedFilePaths, shouldContinue } = await (0, github_1.initialChecksAndGetChangedFiles)(octokit, context, catalogDirectory || undefined);
+        if (!shouldContinue) {
+            return; // Exit if checks fail or no files to process
         }
-        if (!context.payload.pull_request) {
-            core.setFailed('Pull request payload is missing.');
-            return;
-        }
-        const pullRequestNumber = context.payload.pull_request.number;
         const owner = context.repo.owner;
         const repo = context.repo.repo;
-        const headSha = context.payload.pull_request.head.sha;
-        const baseSha = context.payload.pull_request.base.sha;
-        const issueNumber = context.payload.pull_request.number;
-        const changedFilePaths = await (0, github_1.getChangedFiles)(octokit, owner, repo, pullRequestNumber, catalogDirectory || undefined);
+        const headSha = context.payload.pull_request.head.sha; // Non-null assertion as payload is checked in initialChecksAndGetChangedFiles
+        const baseSha = context.payload.pull_request.base.sha; // Non-null assertion
+        const issueNumber = context.payload.pull_request.number; // Non-null assertion
+        const pullRequestNumber = context.payload.pull_request.number; // Non-null assertion
         core.info(`directory: ${catalogDirectory}`);
-        if (changedFilePaths.length === 0) {
-            if (catalogDirectory) {
-                core.info(`No changed files found within the specified directory: ${catalogDirectory}. Action will not comment.`);
-            }
-            else {
-                core.info('No files changed in this pull request.');
-                await octokit.rest.issues.createComment({
-                    owner,
-                    repo,
-                    issue_number: issueNumber,
-                    body: '## EventCatalog: Detected File Changes\n\nNo files were changed in this pull request.',
-                });
-            }
-            return;
-        }
-        const reviewedFiles = [];
-        let overallLowestScore = 100; // Initialize with the highest possible score
-        let lowScoreFile = '';
-        for (const filePath of changedFilePaths) {
-            core.info(`Processing file: ${filePath}`);
-            const oldFileContent = await (0, github_1.getFileContentAtRef)(octokit, owner, repo, filePath, baseSha);
-            const newFileContent = await (0, github_1.getFileContentAtRef)(octokit, owner, repo, filePath, headSha);
-            const promptForAI = `Review the following changes to the file \`${filePath}\`:\n\nOld version (from base branch):\n\`\`\`\n${oldFileContent}\n\`\`\`\n\nNew version (from this PR):\n\`\`\`\n${newFileContent}\n\`\`\`\n\nPlease analyze these changes for potential issues, especially breaking changes if this is a schema or configuration file. Provide your assessment.`;
-            let reviewedFileEntry = {
-                filePath,
-                oldFileContent,
-                newFileContent,
-            };
-            try {
-                core.info(`Requesting AI review for ${filePath}...`);
-                const aiReview = await (0, ai_1.askAI)(promptForAI);
-                core.info(`AI review received for ${filePath}: Score ${aiReview.score}`);
-                reviewedFileEntry.aiReview = aiReview;
-                if (aiReview.score < overallLowestScore) {
-                    overallLowestScore = aiReview.score;
-                    lowScoreFile = filePath;
-                }
-            }
-            catch (error) {
-                const errorMessage = error instanceof Error ? error.message : String(error);
-                core.error(`AI review failed for ${filePath}: ${errorMessage}`);
-                reviewedFileEntry.aiError = errorMessage;
-            }
-            reviewedFiles.push(reviewedFileEntry);
-        }
+        // Call the refactored schema review function
+        const reviewResult = await (0, schema_review_1.performSchemaReview)(octokit, owner, repo, changedFilePaths, baseSha, headSha);
         // Pass the array of ReviewedFile objects to generateCommentBody
-        const commentBody = await (0, github_1.generateCommentBody)(octokit, owner, repo, pullRequestNumber, reviewedFiles, headSha, baseSha, catalogDirectory || undefined);
+        const commentBody = await (0, github_1.generateCommentBody)(octokit, owner, repo, pullRequestNumber, reviewResult.reviewedFiles, headSha, baseSha, catalogDirectory || undefined);
         await octokit.rest.issues.createComment({
             owner,
             repo,
@@ -47006,8 +46964,8 @@ async function run() {
         });
         core.setOutput('comment-url', `https://github.com/${owner}/${repo}/pull/${issueNumber}#issuecomment-${context.payload.comment?.id}`);
         // Fail the action if any file has a score below the threshold
-        if (overallLowestScore < failureThreshold) {
-            core.setFailed(`Action failed: File '${lowScoreFile}' received an AI review score of ${overallLowestScore}, which is below the threshold of ${failureThreshold}.`);
+        if (reviewResult.overallLowestScore < failureThreshold) {
+            core.setFailed(`Action failed: File '${reviewResult.lowScoreFile}' received an AI review score of ${reviewResult.overallLowestScore}, which is below the threshold of ${failureThreshold}.`);
         }
     }
     catch (error) {
@@ -47171,6 +47129,7 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.getFileContentAtRef = getFileContentAtRef;
 exports.getChangedFiles = getChangedFiles;
+exports.initialChecksAndGetChangedFiles = initialChecksAndGetChangedFiles;
 exports.generateCommentBody = generateCommentBody;
 const core = __importStar(__nccwpck_require__(7484));
 const buffer_1 = __nccwpck_require__(181); // Needed for Buffer.from
@@ -47250,6 +47209,36 @@ async function getChangedFiles(octokit, owner, repo, pullRequestNumber, catalogD
     }
     return changedFiles;
 }
+async function initialChecksAndGetChangedFiles(octokit, context, catalogDirectory) {
+    if (context.eventName !== 'pull_request') {
+        core.setFailed('This action can only be run on pull_request events.');
+        return { changedFilePaths: [], shouldContinue: false };
+    }
+    if (!context.payload.pull_request) {
+        core.setFailed('Pull request payload is missing.');
+        return { changedFilePaths: [], shouldContinue: false };
+    }
+    const pullRequestNumber = context.payload.pull_request.number;
+    const owner = context.repo.owner;
+    const repo = context.repo.repo;
+    const changedFilePaths = await getChangedFiles(octokit, owner, repo, pullRequestNumber, catalogDirectory);
+    if (changedFilePaths.length === 0) {
+        if (catalogDirectory) {
+            core.info(`No changed files found within the specified directory: ${catalogDirectory}. Action will not comment.`);
+        }
+        else {
+            core.info('No files changed in this pull request.');
+            await octokit.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number: pullRequestNumber, // Use pullRequestNumber for issue_number
+                body: '## EventCatalog: Detected File Changes\n\nNo files were changed in this pull request.',
+            });
+        }
+        return { changedFilePaths: [], shouldContinue: false };
+    }
+    return { changedFilePaths, shouldContinue: true };
+}
 // Helper function to generate the comment body
 async function generateCommentBody(octokit, // octokit is not used directly here anymore but kept for consistency if needed elsewhere by caller
 owner, repo, pullRequestNumber, reviewedFiles, headSha, baseSha, // baseSha is not used directly here anymore
@@ -47298,6 +47287,94 @@ catalogDirectory) {
         }
     }
     return commentBody;
+}
+
+
+/***/ }),
+
+/***/ 7376:
+/***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
+
+"use strict";
+
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.performSchemaReview = performSchemaReview;
+const core = __importStar(__nccwpck_require__(7484));
+const github_1 = __nccwpck_require__(3848);
+const ai_1 = __nccwpck_require__(1977);
+async function reviewSingleFile(octokit, owner, repo, filePath, baseSha, headSha) {
+    core.info(`Performing schema review for file: ${filePath}`);
+    const oldFileContent = await (0, github_1.getFileContentAtRef)(octokit, owner, repo, filePath, baseSha);
+    const newFileContent = await (0, github_1.getFileContentAtRef)(octokit, owner, repo, filePath, headSha);
+    const promptForAI = `Review the following changes to the file \`${filePath}\`:\n\nOld version (from base branch):\n\`\`\`\n${oldFileContent}\n\`\`\`\n\nNew version (from this PR):\n\`\`\`\n${newFileContent}\n\`\`\`\n\nPlease analyze these changes for potential issues, especially breaking changes if this is a schema or configuration file. Provide your assessment.`;
+    let reviewedFileEntry = {
+        filePath,
+        oldFileContent,
+        newFileContent,
+    };
+    try {
+        core.info(`Requesting AI review for ${filePath}...`);
+        const aiReview = await (0, ai_1.askAI)(promptForAI);
+        core.info(`AI review received for ${filePath}: Score ${aiReview.score}`);
+        reviewedFileEntry.aiReview = aiReview;
+    }
+    catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        core.error(`AI review failed for ${filePath}: ${errorMessage}`);
+        reviewedFileEntry.aiError = errorMessage;
+    }
+    return reviewedFileEntry;
+}
+async function performSchemaReview(octokit, owner, repo, changedFilePaths, baseSha, headSha) {
+    const reviewedFiles = [];
+    let overallLowestScore = 100;
+    let lowScoreFile = '';
+    for (const filePath of changedFilePaths) {
+        const reviewedFileEntry = await reviewSingleFile(octokit, owner, repo, filePath, baseSha, headSha);
+        reviewedFiles.push(reviewedFileEntry);
+        if (reviewedFileEntry.aiReview && reviewedFileEntry.aiReview.score < overallLowestScore) {
+            overallLowestScore = reviewedFileEntry.aiReview.score;
+            lowScoreFile = filePath;
+        }
+    }
+    return {
+        reviewedFiles,
+        overallLowestScore,
+        lowScoreFile,
+    };
 }
 
 

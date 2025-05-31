@@ -101,6 +101,49 @@ export async function getChangedFiles(octokit: any, owner: string, repo: string,
   return changedFiles;
 }
 
+export interface InitialChecksResult {
+  changedFilePaths: string[];
+  shouldContinue: boolean;
+}
+
+export async function initialChecksAndGetChangedFiles(
+  octokit: any, 
+  context: any, 
+  catalogDirectory: string | undefined
+): Promise<InitialChecksResult> {
+  if (context.eventName !== 'pull_request') {
+    core.setFailed('This action can only be run on pull_request events.');
+    return { changedFilePaths: [], shouldContinue: false };
+  }
+
+  if (!context.payload.pull_request) {
+    core.setFailed('Pull request payload is missing.');
+    return { changedFilePaths: [], shouldContinue: false };
+  }
+
+  const pullRequestNumber = context.payload.pull_request.number;
+  const owner = context.repo.owner;
+  const repo = context.repo.repo;
+
+  const changedFilePaths = await getChangedFiles(octokit, owner, repo, pullRequestNumber, catalogDirectory);
+
+  if (changedFilePaths.length === 0) {
+    if (catalogDirectory) {
+      core.info(`No changed files found within the specified directory: ${catalogDirectory}. Action will not comment.`);
+    } else {
+      core.info('No files changed in this pull request.');
+      await octokit.rest.issues.createComment({
+        owner,
+        repo,
+        issue_number: pullRequestNumber, // Use pullRequestNumber for issue_number
+        body: '## EventCatalog: Detected File Changes\n\nNo files were changed in this pull request.',
+      });
+    }
+    return { changedFilePaths: [], shouldContinue: false };
+  }
+  return { changedFilePaths, shouldContinue: true };
+}
+
 // Helper function to generate the comment body
 export async function generateCommentBody(
   octokit: any, // octokit is not used directly here anymore but kept for consistency if needed elsewhere by caller
