@@ -46912,12 +46912,23 @@ const core = __importStar(__nccwpck_require__(7484));
 const github = __importStar(__nccwpck_require__(3228));
 const github_1 = __nccwpck_require__(3848); // Updated import path
 const ai_1 = __nccwpck_require__(1977);
+const promises_1 = __nccwpck_require__(1943);
 async function run() {
     try {
         const githubToken = core.getInput('github_token', { required: true });
-        const catalogDirectory = core.getInput('catalog_directory');
         const failureThresholdInput = core.getInput('failure_threshold');
         const failureThreshold = parseInt(failureThresholdInput, 10);
+        // Log folders in the catalog directory
+        const catalogDirectory = core.getInput('catalog_directory');
+        if (catalogDirectory) {
+            core.info(`Catalog directory: ${catalogDirectory}`);
+            // Read the directory and log the files
+            const files = await (0, promises_1.readdir)(catalogDirectory);
+            core.info(`Files in catalog directory: ${files.join(', ')}`);
+        }
+        else {
+            core.info('No catalog directory specified.');
+        }
         if (isNaN(failureThreshold) || failureThreshold < 0 || failureThreshold > 100) {
             core.setFailed('Invalid input for `failure_threshold`. Must be a number between 0 and 100.');
             return;
@@ -47361,6 +47372,14 @@ module.exports = require("events");
 
 "use strict";
 module.exports = require("fs");
+
+/***/ }),
+
+/***/ 1943:
+/***/ ((module) => {
+
+"use strict";
+module.exports = require("fs/promises");
 
 /***/ }),
 

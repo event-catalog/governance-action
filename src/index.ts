@@ -2,13 +2,24 @@ import * as core from '@actions/core';
 import * as github from '@actions/github';
 import { getChangedFiles, generateCommentBody, getFileContentAtRef, ReviewedFile } from './lib/github'; // Updated import path
 import { askAI } from './lib/ai';
+import { readdir } from 'fs/promises';
 
 async function run(): Promise<void> {
   try {
     const githubToken = core.getInput('github_token', { required: true });
-    const catalogDirectory = core.getInput('catalog_directory');
     const failureThresholdInput = core.getInput('failure_threshold');
     const failureThreshold = parseInt(failureThresholdInput, 10);
+
+    // Log folders in the catalog directory
+    const catalogDirectory = core.getInput('catalog_directory');
+    if (catalogDirectory) {
+      core.info(`Catalog directory: ${catalogDirectory}`);
+      // Read the directory and log the files
+      const files = await readdir(catalogDirectory);
+      core.info(`Files in catalog directory: ${files.join(', ')}`);
+    } else {
+      core.info('No catalog directory specified.');
+    }
 
     if (isNaN(failureThreshold) || failureThreshold < 0 || failureThreshold > 100) {
       core.setFailed('Invalid input for `failure_threshold`. Must be a number between 0 and 100.');
